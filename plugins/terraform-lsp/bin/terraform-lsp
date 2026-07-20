@@ -1,0 +1,88 @@
+#!/usr/bin/env sh
+# Launches `terraform-ls serve` with a memory cap and an idle kill. Prefers
+# terraform-ls on PATH; falls back to the copy bundled with the VS Code
+# HashiCorp Terraform extension so no separate install is needed on machines
+# that have it.
+#
+# Long-lived language servers accumulate memory; a restart is a clean fix
+# because the LSP client respawns the server and re-initializes on the next
+# request. The wrapper cannot restart terraform-ls itself — the client owns
+# the `initialize` handshake — so on breach it kills the child and exits,
+# letting the client respawn.
+#
+# Idle detection uses the child's accumulated CPU time as a proxy: the shim
+# does not sit in the stdio stream, but a server nobody queries burns no CPU,
+# so an unchanged CPU counter across polls means the server is unused.
+#
+#   TERRAFORM_LSP_MAX_RSS_KB   RSS cap in KB (default 768000 = 750 MiB; 0 disables)
+#   TERRAFORM_LSP_POLL_SECS    seconds between checks (default 900 = 15 min)
+#   TERRAFORM_LSP_IDLE_SECS    kill after this long with no CPU activity
+#                              (default 86400 = 24 h; 0 disables)
+
+set -u
+
+TFLS=$(command -v terraform-ls || true)
+if [ -z "$TFLS" ]; then
+  for cand in "$HOME"/.vscode/extensions/hashicorp.terraform-*/bin/terraform-ls; do
+    [ -x "$cand" ] && TFLS=$cand
+  done
+fi
+
+if [ -z "$TFLS" ]; then
+  printf 'terraform-ls not found on PATH and no VS Code HashiCorp extension bundle present.\n' >&2
+  printf 'Install it with one of:\n' >&2
+  printf '  brew install hashicorp/tap/terraform-ls\n' >&2
+  printf '  https://developer.hashicorp.com/terraform/ls (release binaries)\n' >&2
+  exit 127
+fi
+
+CAP_KB=${TERRAFORM_LSP_MAX_RSS_KB:-768000}
+POLL_SECS=${TERRAFORM_LSP_POLL_SECS:-900}
+IDLE_SECS=${TERRAFORM_LSP_IDLE_SECS:-86400}
+
+if [ "$CAP_KB" -eq 0 ] && [ "$IDLE_SECS" -eq 0 ]; then
+  exec "$TFLS" serve "$@"
+fi
+
+# The explicit <&0 is required: POSIX redirects a background job's stdin to
+# /dev/null, which would make the server see EOF and exit immediately.
+"$TFLS" serve "$@" <&0 &
+child=$!
+
+(
+  last_cpu=''
+  idle=0
+  while kill -0 "$child" 2>/dev/null; do
+    sleep "$POLL_SECS"
+    rss=$(ps -o rss= -p "$child" 2>/dev/null | tr -d ' ')
+    [ -n "$rss" ] || exit 0
+    if [ "$CAP_KB" -gt 0 ] && [ "$rss" -gt "$CAP_KB" ]; then
+      printf 'terraform-lsp: RSS %sKB exceeded cap %sKB, killing server for client respawn\n' \
+        "$rss" "$CAP_KB" >&2
+      kill "$child" 2>/dev/null
+      exit 0
+    fi
+    if [ "$IDLE_SECS" -gt 0 ]; then
+      cpu=$(ps -o time= -p "$child" 2>/dev/null | tr -d ' ')
+      if [ "$cpu" = "$last_cpu" ]; then
+        idle=$((idle + POLL_SECS))
+        if [ "$idle" -ge "$IDLE_SECS" ]; then
+          printf 'terraform-lsp: no CPU activity for %ss, killing idle server\n' "$idle" >&2
+          kill "$child" 2>/dev/null
+          exit 0
+        fi
+      else
+        idle=0
+        last_cpu=$cpu
+      fi
+    fi
+  done
+) &
+watcher=$!
+
+trap 'kill "$child" "$watcher" 2>/dev/null' TERM INT HUP
+
+wait "$child"
+status=$?
+kill "$watcher" 2>/dev/null
+exit "$status"

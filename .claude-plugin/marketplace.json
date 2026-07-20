@@ -1,0 +1,29 @@
+{
+  "name": "terraform-lsp-cc-plugin",
+  "owner": {
+    "name": "Michael Denyer"
+  },
+  "plugins": [
+    {
+      "name": "terraform-lsp",
+      "description": "Terraform language server (terraform-ls) — diagnostics, completion, and code intelligence for HCL",
+      "version": "1.0.0",
+      "author": {
+        "name": "Michael Denyer"
+      },
+      "source": "./plugins/terraform-lsp",
+      "category": "development",
+      "strict": false,
+      "lspServers": {
+        "terraform-ls": {
+          "command": "${CLAUDE_PLUGIN_ROOT}/bin/terraform-lsp",
+          "args": [],
+          "extensionToLanguage": {
+            ".tf": "terraform",
+            ".tfvars": "terraform-vars"
+          }
+        }
+      }
+    }
+  ]
+}
