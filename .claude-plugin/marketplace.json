@@ -1,7 +1,9 @@
 {
   "name": "terraform-lsp-cc-plugin",
   "owner": {
-    "name": "Michael Denyer"
+    "name": "Michael Denyer",
+    "email": "mdenyer@gmail.com",
+    "url": "https://github.com/michael-denyer"
   },
   "plugins": [
     {
@@ -9,7 +11,9 @@
       "description": "Terraform language server (terraform-ls) — diagnostics, completion, and code intelligence for HCL",
       "version": "1.0.0",
       "author": {
-        "name": "Michael Denyer"
+        "name": "Michael Denyer",
+        "email": "mdenyer@gmail.com",
+        "url": "https://github.com/michael-denyer"
       },
       "source": "./plugins/terraform-lsp",
       "category": "development",
