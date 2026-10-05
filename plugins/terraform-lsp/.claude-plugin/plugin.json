@@ -4,7 +4,7 @@
   "description": "Terraform language server (terraform-ls) — diagnostics, completion, and code intelligence for HCL",
   "author": {
     "name": "Michael Denyer",
-    "email": "mdenyer@gmail.com",
+    "email": "97485362+michael-denyer@users.noreply.github.com",
     "url": "https://github.com/michael-denyer"
   },
   "homepage": "https://github.com/michael-denyer/terraform-lsp-cc-plugin",
